@@ -16,11 +16,11 @@
 #ifndef _TD_OS_SEMPHONE_H_
 #define _TD_OS_SEMPHONE_H_
 
+#include <semaphore.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <semaphore.h>
 
 #if defined(_TD_DARWIN_64)
 #include <dispatch/dispatch.h>
@@ -33,8 +33,17 @@ int tsem_timewait(tsem_t *sim, int64_t milis);
 int tsem_post(tsem_t *sem);
 int tsem_destroy(tsem_t *sem);
 
-#else
+#elif defined(_TD_WINDOWS_64) || defined(_TD_WINDOWS_32)
+#include <windows.h>
 
+#define tsem_t       HANDLE
+int tsem_init(tsem_t *sem, int pshared, unsigned int value);
+int tsem_wait(tsem_t *sem);
+int tsem_timewait(tsem_t *sim, int64_t milis);
+int tsem_post(tsem_t *sem);
+int tsem_destroy(tsem_t *sem);
+
+#else
 #define tsem_t       sem_t
 #define tsem_init    sem_init
 int tsem_wait(tsem_t *sem);

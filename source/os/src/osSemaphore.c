@@ -67,39 +67,46 @@ int32_t taosGetAppName(char* name, int32_t* len) {
   return 0;
 }
 
+
 int32_t tsem_wait(tsem_t* sem) {
-  int ret = 0;
+  DWORD ret = 0;
   do {
-    ret = sem_wait(sem);
+    ret = WaitForSingleObject(*sem, INFINITE);
   } while (ret != 0 && errno == EINTR);
   return ret;
 }
 
-int32_t tsem_timewait(tsem_t* sem, int64_t ms) {
-  struct timespec ts;
-  taosClockGetTime(0, &ts);
-
-  ts.tv_nsec += ms * 1000000;
-  ts.tv_sec += ts.tv_nsec / 1000000000;
-  ts.tv_nsec %= 1000000000;
-  int rc;
-  while ((rc = sem_timedwait(sem, &ts)) == -1 && errno == EINTR) continue;
-  return rc;
-  /* This should have timed out */
-  // ASSERT(errno == ETIMEDOUT);
-  // ASSERT(rc != 0);
-  // GetSystemTimeAsFileTime(&ft_after);
-  // // We specified a non-zero wait. Time must advance.
-  // if (ft_before.dwLowDateTime == ft_after.dwLowDateTime && ft_before.dwHighDateTime == ft_after.dwHighDateTime)
-  //   {
-  //     printf("nanoseconds: %d, rc: %d, code:0x%x. before filetime: %d, %d; after filetime: %d, %d\n",
-  //         nanosecs, rc, errno,
-  //         (int)ft_before.dwLowDateTime, (int)ft_before.dwHighDateTime,
-  //         (int)ft_after.dwLowDateTime, (int)ft_after.dwHighDateTime);
-  //     printf("time must advance during sem_timedwait.");
-  //     return 1;
-  //   }
+int32_t tsem_timewait(tsem_t* sem, int64_t timeout_ms) {
+  DWORD start_time = GetTickCount64();
+  DWORD elapsed_time;
+  while (1) {
+    DWORD result = WaitForSingleObject(*sem, timeout_ms);
+    if (result == WAIT_OBJECT_0) {
+      return 0;  // Semaphore acquired
+    }
+    elapsed_time = GetTickCount64() - start_time;
+    if (elapsed_time >= timeout_ms) {
+      return -1;  // Timeout reached
+    }
+    timeout_ms -= elapsed_time;
+  }
 }
+
+int tsem_init(tsem_t* sem, int pshared, unsigned int value) {
+  *sem = CreateSemaphore(NULL, value, LONG_MAX, NULL);
+  return (*sem != NULL) ? 0 : -1;
+}
+
+int tsem_post(tsem_t* sem) {
+  if (ReleaseSemaphore(*sem, 1, NULL)) return 0;
+  return -1;
+}
+
+int tsem_destroy(tsem_t* sem){
+  if (CloseHandle(*sem, 1, NULL)) return 0;
+  return -1;
+}
+
 
 #elif defined(_TD_DARWIN_64)
 
